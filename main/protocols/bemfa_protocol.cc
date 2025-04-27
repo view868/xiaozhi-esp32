@@ -23,6 +23,8 @@ BemfaProtocol::BemfaProtocol() : Protocol() {
     private_key_ = "";                                         // 私钥，用于安全认证
     publish_topic_ = "testtopic";                              // MQTT发布主题
     event_group_handle_ = xEventGroupCreate();                 // 创建事件组，用于同步操作
+    username_= "";
+    password_ = "";
 }
 
 /**
