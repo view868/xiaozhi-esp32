@@ -5,6 +5,7 @@
 #include "ml307_ssl_transport.h"
 #include "audio_codec.h"
 #include "mqtt_protocol.h"
+#include "bemfa_protocol.h" // 引入巴法云连接文件
 #include "websocket_protocol.h"
 #include "font_awesome_symbols.h"
 #include "iot/thing_manager.h"
@@ -491,6 +492,58 @@ void Application::Start() {
         }
     });
     protocol_->Start();
+
+    // 初始化并启动Bemfa协议
+    ESP_LOGI(TAG, "Initializing Bemfa protocol");
+    bemfa_protocol_ = std::make_unique<BemfaProtocol>();
+    
+    // 设置Bemfa协议的回调函数
+    bemfa_protocol_->OnNetworkError([this](const std::string& message) {
+        ESP_LOGW(TAG, "Bemfa: protocol error: %s", message.c_str());
+    });
+    bemfa_protocol_->OnIncomingJson([this, display](const cJSON* root) {
+        // 处理来自Bemfa的JSON消息
+        auto type = cJSON_GetObjectItem(root, "type");
+        if (type != NULL) {
+            ESP_LOGI(TAG, "Bemfa: Received Bemfa message type: %s", type->valuestring);
+            // 这里可以添加特定的Bemfa消息处理逻辑
+            if (strcmp(type->valuestring, "tts") == 0) {
+                auto state = cJSON_GetObjectItem(root, "state");
+                if (strcmp(state->valuestring, "start") == 0) {
+                    Schedule([this]() {
+                        aborted_ = false;
+                        if (device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateListening) {
+                            SetDeviceState(kDeviceStateSpeaking);
+                        }
+                    });
+                } else if (strcmp(state->valuestring, "stop") == 0) {
+                    Schedule([this]() {
+                        background_task_->WaitForCompletion();
+                        if (device_state_ == kDeviceStateSpeaking) {
+                            if (listening_mode_ == kListeningModeManualStop) {
+                                SetDeviceState(kDeviceStateIdle);
+                            } else {
+                                SetDeviceState(kDeviceStateListening);
+                            }
+                        }
+                    });
+                }
+            }
+            else if (strcmp(type->valuestring, "stt") == 0) {
+                // 输出文本到屏幕
+                auto text = cJSON_GetObjectItem(root, "text");
+                if (text != NULL) {
+                    ESP_LOGI(TAG, ">> %s", text->valuestring);
+                    Schedule([this, display, message = std::string(text->valuestring)]() {
+                        display->SetChatMessage("user", message.c_str());
+                    });
+                }
+            }
+        }
+    });
+    
+    // 启动Bemfa协议
+    bemfa_protocol_->Start(); 
 
 #if CONFIG_USE_AUDIO_PROCESSOR
     audio_processor_.Initialize(codec, realtime_chat_enabled_);

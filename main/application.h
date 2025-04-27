@@ -88,6 +88,7 @@ private:
     std::mutex mutex_;
     std::list<std::function<void()>> main_tasks_;
     std::unique_ptr<Protocol> protocol_;
+    std::unique_ptr<Protocol> bemfa_protocol_; // 添加Bemfa协议实例
     EventGroupHandle_t event_group_ = nullptr;
     esp_timer_handle_t clock_timer_handle_ = nullptr;
     volatile DeviceState device_state_ = kDeviceStateUnknown;
