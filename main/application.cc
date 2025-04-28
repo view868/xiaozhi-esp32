@@ -501,6 +501,35 @@ void Application::Start() {
     bemfa_protocol_->OnNetworkError([this](const std::string& message) {
         ESP_LOGW(TAG, "Bemfa: protocol error: %s", message.c_str());
     });
+    // bemfa_protocol_->OnIncomingAudio([this](std::vector<uint8_t>&& data) {
+    //     const int max_packets_in_queue = 300 / OPUS_FRAME_DURATION_MS;
+    //     std::lock_guard<std::mutex> lock(mutex_);
+    //     if (audio_decode_queue_.size() < max_packets_in_queue) {
+    //         audio_decode_queue_.emplace_back(std::move(data));
+    //     }
+    // });
+    bemfa_protocol_->OnAudioChannelOpened([this, codec, &board]() {
+        board.SetPowerSaveMode(false);
+        if (bemfa_protocol_->server_sample_rate() != codec->output_sample_rate()) {
+            ESP_LOGW(TAG, "Bemfa: Server sample rate %d does not match device output sample rate %d, resampling may cause distortion",
+                bemfa_protocol_->server_sample_rate(), codec->output_sample_rate());
+        }
+        SetDecodeSampleRate(bemfa_protocol_->server_sample_rate(), bemfa_protocol_->server_frame_duration());
+        auto& thing_manager = iot::ThingManager::GetInstance();
+        bemfa_protocol_->SendIotDescriptors(thing_manager.GetDescriptorsJson());
+        std::string states;
+        if (thing_manager.GetStatesJson(states, false)) {
+            bemfa_protocol_->SendIotStates(states);
+        }
+    });
+    bemfa_protocol_->OnAudioChannelClosed([this, &board]() {
+        board.SetPowerSaveMode(true);
+        Schedule([this]() {
+            auto display = Board::GetInstance().GetDisplay();
+            display->SetChatMessage("system", "");
+            SetDeviceState(kDeviceStateIdle);
+        });
+    });
     bemfa_protocol_->OnIncomingJson([this, display](const cJSON* root) {
         // 处理来自Bemfa的JSON消息
         auto type = cJSON_GetObjectItem(root, "type");
@@ -510,6 +539,8 @@ void Application::Start() {
             if (strcmp(type->valuestring, "tts") == 0) {
                 auto state = cJSON_GetObjectItem(root, "state");
                 if (strcmp(state->valuestring, "start") == 0) {
+                    // 主动开启语音通道
+                    bemfa_protocol_->OpenAudioChannel();
                     Schedule([this]() {
                         aborted_ = false;
                         if (device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateListening) {

@@ -48,6 +48,7 @@ private:
     uint32_t local_sequence_;
     uint32_t remote_sequence_;
 
+    void ParseServerHello(const cJSON* root);
     bool StartMqttClient(bool report_error=false);
     std::string DecodeHexString(const std::string& hex_string);
     bool SendText(const std::string& text) override;
