@@ -25,12 +25,19 @@
  * 4. 创建事件组用于同步操作
  */
 BemfaProtocol::BemfaProtocol() : Protocol() {
-    endpoint_ = "bemfa.com";                                    // 设置巴法云服务器地址
-    client_id_ = "6407f6655dd3de7ab3a5476d36c9ab26";          // 设置设备唯一标识符
+    // endpoint_ = "bemfa.com";                                    // 设置巴法云服务器地址
+    // client_id_ = "6407f6655dd3de7ab3a5476d36c9ab26";          // 设置设备唯一标识符
+    // private_key_ = "";                                         // 初始化私钥为空
+    // publish_topic_ = "testtopic";                          // 设置默认的MQTT发布主题 巴法云中主题后增加set可避免受到自己的消息
+    // username_= "";                                             // 初始化用户名为空
+    // password_ = "";                                            // 初始化密码为空
+    endpoint_ = "a1b03893.ala.cn-hangzhou.emqxsl.cn";                                    // 设置巴法云服务器地址
+    client_id_ = "client_" + std::to_string(esp_random() % 1000000);  // 生成随机的MQTT客户端ID
     private_key_ = "";                                         // 初始化私钥为空
-    publish_topic_ = "testtopic";                          // 设置默认的MQTT发布主题 巴法云中主题后增加set可避免受到自己的消息
-    username_= "";                                             // 初始化用户名为空
-    password_ = "";                                            // 初始化密码为空
+    publish_topic_ = "aiot/c2s";                          // 设置默认的MQTT发布主题
+    subscribe_topic_ = "aiot/s2c";                          // 设置默认的MQTT订阅主题   
+    username_= "client01";                                             // 初始化用户名为空
+    password_ = "123456";                                            // 初始化密码为空
     event_group_handle_ = xEventGroupCreate();                 // 创建FreeRTOS事件组，用于任务同步
 }
 
@@ -114,11 +121,14 @@ bool BemfaProtocol::StartMqttClient(bool report_error) {
         }
         
         cJSON* type = cJSON_GetObjectItem(root, "type");      // 获取消息类型字段
+
         if (type == nullptr) {
             ESP_LOGE(TAG, "Message type is not specified");   // 消息类型不存在
             cJSON_Delete(root);                               // 释放JSON对象
             return;
         }
+        ESP_LOGE(TAG, "收到mqtt消息，类型为：%s", type->valuestring);   // 消息类型不存在
+
 
         if (strcmp(type->valuestring, "hello") == 0) {
             ParseServerHello(root);
@@ -139,16 +149,20 @@ bool BemfaProtocol::StartMqttClient(bool report_error) {
         last_incoming_time_ = std::chrono::steady_clock::now();  // 更新最后接收消息的时间
     });
 
-    // 连接MQTT服务器
-    if (!mqtt_->Connect(endpoint_, 9501, client_id_, username_, password_)) {
+
+    // 配置SSL/TLS
+    // mqtt_->EnableSSL(true);  // 启用SSL/TLS
+
+    // 连接MQTT服务器 bemfa端口为9501 emqx端口为8883
+    if (!mqtt_->Connect(endpoint_, 8883, client_id_, username_, password_)) {
         ESP_LOGE(TAG, "Failed to connect to endpoint");       // 连接失败时记录错误
         return false;
     }
 
     ESP_LOGI(TAG, "Connected to MQTT server successfully");   // 连接成功
 
-    mqtt_->Subscribe(publish_topic_, 1);                      // 订阅指定主题，QoS级别为1
-    ESP_LOGI(TAG, "Attempted to subscribe to topic: %s (ignore return value)", publish_topic_.c_str());
+    mqtt_->Subscribe(subscribe_topic_, 1);                      // 订阅指定主题，QoS级别为1
+    ESP_LOGI(TAG, "Attempted to subscribe to topic: %s (ignore return value)", subscribe_topic_.c_str());
     return true;
 }
 
@@ -169,7 +183,7 @@ bool BemfaProtocol::SendText(const std::string& text) {
     }
     
     // 发布消息到MQTT主题
-    if (!mqtt_->Publish(publish_topic_ + "/set", text)) {
+    if (!mqtt_->Publish(publish_topic_, text)) {
         ESP_LOGE(TAG, "Failed to publish message: %s", text.c_str());
         // SetError(Lang::Strings::SERVER_ERROR);
         return false;

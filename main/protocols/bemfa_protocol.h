@@ -37,6 +37,7 @@ private:
     std::string username_;
     std::string password_;
     std::string publish_topic_;
+    std::string subscribe_topic_;
     Mqtt* mqtt_ = nullptr;  // 添加 mqtt_ 成员变量
     // UDP
     std::mutex channel_mutex_;

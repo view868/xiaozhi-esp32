@@ -2,7 +2,7 @@
 {
   "type": "stt",
   "text": "你好呀",
-  "session_id": "1"
+  "session_id": "10001"
 }
 
 
@@ -10,14 +10,14 @@
 {
   "type": "tts",
   "state": "start",
-  "session_id": "1"
+  "session_id": "10001"
 }
 
 ### 停止说话
 {
   "type": "tts",
   "state": "stop",
-  "session_id": "1"
+  "session_id": "10001"
 }
 
 ### 开始
@@ -25,7 +25,7 @@
   "type": "hello",
   "transport": "udp",
   "version": 1,
-  "session_id": "1",
+  "session_id": "10001",
   "audio_params": {
        "format": "opus",
        "sample_rate": 16000,
